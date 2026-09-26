@@ -161,8 +161,11 @@
 
   // Ctrl+Shift+X fallback: when Chrome has not bound the command (unpacked installs, conflicts),
   // the key reaches the page and we toggle from here. When Chrome owns it, the page never sees it.
+  // On macOS Chrome maps the manifest's Ctrl to Command, so accept either there.
+  const IS_MAC = /Mac/i.test(navigator.platform || navigator.userAgent);
   function onHotkey(e) {
-    if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.code === 'KeyX' && !e.repeat) {
+    const mod = IS_MAC ? (e.metaKey || e.ctrlKey) && !(e.metaKey && e.ctrlKey) : e.ctrlKey && !e.metaKey;
+    if (mod && e.shiftKey && !e.altKey && e.code === 'KeyX' && !e.repeat) {
       e.preventDefault();
       e.stopImmediatePropagation();
       chrome.runtime.sendMessage({ type: 'pl:toggle' }).catch(() => {});

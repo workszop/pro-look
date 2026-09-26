@@ -1,6 +1,6 @@
 // Pro Look – end-to-end probe: real Chromium (Chrome for Testing) with the unpacked extension.
 // Reads the data-pl-* DOM contract on #pro-look-root instead of scraping pixels.
-// Usage: node tests/e2e.mjs   (env: PW_MODULE, CHROME_BIN, SHOTS_DIR, HEADED=1)
+// Usage: node tests/e2e.mjs   (env: PW_MODULE, CHROME_BIN, SHOTS_DIR, EXT_DIR, HEADED=1)
 import { spawn } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
@@ -14,6 +14,7 @@ const PW_MODULE = process.env.PW_MODULE || join(homedir(), '.hermes/hermes-agent
 // Branded Chrome ≥137 ignores --load-extension; Chrome for Testing does not.
 const CHROME_BIN = process.env.CHROME_BIN || join(homedir(), '.cache/ms-playwright/chromium-1234/chrome-linux64/chrome');
 const SHOTS_DIR = process.env.SHOTS_DIR || join(ROOT, 'shots');
+const EXT_DIR = process.env.EXT_DIR || ROOT; // e.g. the unzipped release, to test what users install
 const STEP_MS = 10000;
 const FAKE_TITLE = 'Opportunity | Workspace';
 
@@ -70,7 +71,7 @@ try {
     executablePath: CHROME_BIN,
     headless: !process.env.HEADED,
     viewport: { width: 1440, height: 900 },
-    args: [`--disable-extensions-except=${ROOT}`, `--load-extension=${ROOT}`, '--no-first-run', '--no-default-browser-check'],
+    args: [`--disable-extensions-except=${EXT_DIR}`, `--load-extension=${EXT_DIR}`, '--no-first-run', '--no-default-browser-check'],
   }), 30000, 'launch');
 
   let [sw] = context.serviceWorkers();
