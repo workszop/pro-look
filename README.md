@@ -5,21 +5,22 @@ Chrome extension (Manifest V3, no build step) that re-renders any website as a g
 ## Install
 1. Open `chrome://extensions`, enable **Developer mode**.
 2. **Load unpacked** → select this folder.
-3. Press **Alt+Shift+X** (or click the toolbar icon) on any page.
+3. Press **Ctrl+Shift+X** (or click the toolbar icon) on any page.
 
 ## What you see
 - **Home pages, section fronts, blogs, link aggregators** open as an *All Opportunities* list view: every headline is a row (title link, summary, thumbnail, section as Account, time as Close Date). Click a row (or `j`/`k` + Enter) to open the article.
+- **Social feeds** (X timelines, and other sites whose posts are `<article>`s with a timestamp permalink) open as a *Cases* list: author, @handle, the full post text with line breaks, quoted posts, engagement (replies · likes · views). Scrolling to the bottom quietly scrolls the hidden page so the site loads more; posts are kept even after the site drops them from its DOM. A single post (e.g. `x.com/user/status/…`) opens as a *Case*: the post is the Description, replies are a comment timeline with their real authors, and more replies load as you scroll.
 - **Articles and posts** open as an *Opportunity* record: real site, author and date in the header, the lead as Description, then every paragraph in reading order as an Activity timeline entry (Email / Call / Note / Meeting), lists as task lists, images as File entries, tables as report grids. Site navigation, tags and mega-menus move to a *Related Links* card at the end.
 
 ## Use
 | Key | Action |
 | --- | --- |
-| Alt+Shift+X | Toggle disguise on the current tab (rebind at `chrome://extensions/shortcuts`) |
+| Ctrl+Shift+X | Toggle disguise on the current tab (rebind at `chrome://extensions/shortcuts`) |
 | / | Search / filter the record |
 | j / k | Next / previous section (list view: next / previous row, Enter opens) |
 | Esc | Close image preview, clear search |
 
-- If Chrome did not register Alt+Shift+X (common for unpacked installs), the page itself catches the key, so it still works; to also make it work while focus is in the address bar, set it at `chrome://extensions/shortcuts`.
+- If Chrome did not register Ctrl+Shift+X (common for unpacked installs), the page itself catches the key, so it still works; to also make it work while focus is in the address bar, set it at `chrome://extensions/shortcuts`.
 - The disguise follows you as you click links in the same tab.
 - Right-click the toolbar icon → **Always disguise this site** to auto-disguise a host.
 - Options page: always-on hosts, density, thumbnail size.

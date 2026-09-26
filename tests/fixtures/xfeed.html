@@ -1,0 +1,19 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Home / X</title></head>
+<body><div id="react-root"><header role="banner"><nav role="navigation" aria-label="Primary"><a href="/home">Home</a><a href="/explore">Explore</a><a href="/notifications">Notifications</a></nav></header>
+<main role="main"><div data-testid="primaryColumn"><h2 role="heading">Home</h2><div aria-label="Timeline: Your Home Timeline"><div id="cells"></div><div id="spacer" style="height:3000px"></div></div></div>
+<div data-testid="sidebarColumn"><section><h2 role="heading">What's happening</h2><div><a href="/search?q=otters">#OttersEverywhere trending with 12K posts today</a></div></section></div></main></div>
+<script src="xpost.js"></script>
+<script>
+// Virtualized like X: only WINDOW cells live in the DOM; scrolling near the bottom appends 5 and drops the oldest 5.
+const TOTAL = 40, WINDOW = 10;
+let first = 0, last = WINDOW;
+function draw() { document.getElementById('cells').innerHTML = Array.from({ length: last - first }, (_, k) => xPost(xFake(first + k))).join(''); }
+setTimeout(draw, 300); // SPA: content arrives after DOMContentLoaded
+window.addEventListener('scroll', () => {
+  if (last >= TOTAL) return;
+  if (window.scrollY + window.innerHeight > document.documentElement.scrollHeight - 1500) {
+    last = Math.min(TOTAL, last + 5); first = Math.max(0, last - WINDOW);
+    setTimeout(() => { draw(); document.getElementById('spacer').style.height = (3000 + last * 300) + 'px'; }, 150); // X grows the page as it loads
+  }
+});
+</script></body></html>

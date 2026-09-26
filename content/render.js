@@ -6,7 +6,11 @@
   // ─── Constants ───
   const VERSION = '0.1.0';
   const HOST_ID = 'pro-look-root';
-  const FAKE_TITLES = { article: 'Opportunity | Workspace', index: 'Opportunities | Workspace' };
+  const FAKE_TITLES = { article: 'Opportunity | Workspace', index: 'Opportunities | Workspace', feed: 'Cases | Workspace', case: 'Case | Workspace' };
+  const CASE_STAGES = ['New', 'Working', 'Escalated', 'Resolved', 'Closed'];
+  const CASE_STATUSES = ['New', 'Working', 'Escalated', 'Waiting on Customer', 'Closed'];
+  const LOAD_MORE_PX = 600;
+  const LOAD_MORE_THROTTLE_MS = 1500;
   const STAGES = ['Qualify', 'Develop', 'Propose', 'Negotiate', 'Close'];
   const APP_TABS = ['Home', 'Accounts', 'Contacts', 'Opportunities', 'Reports', 'Dashboards'];
   // Article paragraphs become activity-timeline entries of these kinds (reading order preserved)
@@ -32,7 +36,7 @@
   // ─── State ───
   const S = {
     host: null, shadow: null, model: null, opts: null,
-    saved: null, titleObserver: null, rng: null, clock: null, fakeTitle: FAKE_TITLES.article,
+    saved: null, titleObserver: null, rng: null, clock: null, fakeTitle: FAKE_TITLES.article, lastMore: 0, moreTimer: null,
   };
 
   // ─── Helpers ───
@@ -154,6 +158,106 @@
       h('div', { class: 'card-b chips' }, links.map((r) => h('a', { class: 'chip', href: r.href, text: r.t }))));
   }
 
+  // ─── Render: feeds (social timelines) ───
+  const caseNo = (href) => String(hashStr(href) % 1e8).padStart(8, '0');
+
+  // "3 replies, 2 reposts, 11 likes, 2 bookmarks, 1017 views" → "3 replies · 11 likes · 1017 views"
+  function statsShort(stats) {
+    const m = {};
+    for (const part of (stats || '').split(',')) {
+      const mm = /([\d.,]+[KMB]?)\s+([A-Za-z]+)/.exec(part.trim());
+      if (mm) m[mm[2].toLowerCase()] = mm[1];
+    }
+    return [m.replies && `${m.replies} replies`, m.likes && `${m.likes} likes`, m.views && `${m.views} views`].filter(Boolean).join(' · ');
+  }
+
+  const thumbEl = (src, alt) => h('img', { class: 'thumb', src, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', 'data-alt': alt });
+  const initialEl = (name) => h('span', { class: 'ico acc', 'aria-hidden': 'true', text: (name || '?').trim().slice(0, 1).toUpperCase() });
+
+  function postBodyEl(it) {
+    return h('div', { class: 'post' },
+      it.context ? h('div', { class: 'post-ctx', text: it.context }) : null,
+      h('div', { class: 'post-b' }, runsEl(it.runs)),
+      it.quote ? h('div', { class: 'post-q' }, it.quote.author ? h('b', { text: it.quote.author + ': ' }) : null, runsEl(it.quote.runs)) : null,
+      it.video ? h('span', { class: 'pill', text: 'Video attached' }) : null);
+  }
+
+  function moreEl() {
+    return h('div', { class: 'more' },
+      h('button', { class: 'btn', type: 'button', 'data-pl-more': '', text: 'Load more', onclick: () => needMore(true) }),
+      h('span', { class: 'hl-l', 'data-pl-more-status': '', 'aria-live': 'polite' }));
+  }
+
+  function feedListEl(model) {
+    const items = model.items.filter((it) => SAFE_HREF_RE.test(it.href));
+    const rows = items.map((it, i) => h('tr', { 'data-pl-item': '' },
+      h('td', { class: 'num', text: String(i + 1) }),
+      h('td', {}, h('div', { class: 'lv-name top' },
+        it.image ? thumbEl(it.image, runsText(it.runs).slice(0, 80)) : initialEl(it.author),
+        h('div', {},
+          h('div', { class: 'post-h' }, h('a', { class: 'lv-link', href: it.href, text: it.author || 'Case' }), it.handle ? h('span', { class: 'muted', text: ' ' + it.handle }) : null),
+          postBodyEl(it)))),
+      h('td', { class: 'meta', text: caseNo(it.href) }),
+      h('td', {}, h('span', { class: 'pill', text: pick(CASE_STATUSES) })),
+      h('td', { class: 'meta', text: it.time }),
+      h('td', { class: 'meta', text: statsShort(it.stats) })));
+    const table = h('table', { class: 'lv-t' },
+      h('thead', {}, h('tr', {}, ['', 'Subject', 'Case Number', 'Status', 'Opened', 'Engagement'].map((t) => h('th', { text: t })))),
+      h('tbody', {}, rows));
+    return [
+      h('div', { class: 'card' }, h('div', { class: 'rec-head' },
+        h('div', { class: 'rec-top' },
+          h('span', { class: 'ico task', 'aria-hidden': 'true', text: 'C' }),
+          h('div', {}, h('div', { class: 'rec-kind', text: 'Cases' }), h('h1', { class: 'rec-name', text: `${model.title} ▾` })),
+          h('div', { class: 'rec-actions' }, ['New', 'Assign', 'Change Status'].map((t) => h('button', { class: 'btn', type: 'button', text: t })))),
+        h('div', { class: 'hl-l', text: `${items.length} cases · Sorted by Date Opened · Updated a few seconds ago` }))),
+      items.length
+        ? h('section', { class: 'card sec lv', 'data-pl-section': '0' }, h('div', { class: 'tbl-wrap' }, table), moreEl())
+        : h('div', { class: 'card empty', text: 'Loading cases...' }),
+    ];
+  }
+
+  function commentEl(it) {
+    return h('li', { class: 'tl-e', 'data-kind': 'email', 'data-pl-item': '' },
+      h('span', { class: 'tl-ico email', 'aria-hidden': 'true', text: '✉' }),
+      h('div', { class: 'tl-c' },
+        h('div', { class: 'tl-m' }, h('b', { text: 'Comment' }), ' · ', h('a', { href: it.href, text: it.author || 'Reply' }),
+          it.handle ? ` ${it.handle}` : '', it.time ? ` · ${it.time}` : '', it.stats ? ` · ${statsShort(it.stats)}` : ''),
+        h('div', { class: 'tl-b' }, postBodyEl(it), it.image ? h('div', { class: 'file-cell' }, thumbEl(it.image, 'Attachment'), h('span', { text: 'Attachment' })) : null)));
+  }
+
+  // One post's own page: the post is the Case, replies are its comment timeline
+  function caseRecordEl(model) {
+    const f = model.items.find((it) => it.focal);
+    const replies = model.items.filter((it) => !it.focal && SAFE_HREF_RE.test(it.href));
+    const opened = f.datetime && !isNaN(new Date(f.datetime)) ? fmtStamp(new Date(f.datetime)) : f.time;
+    const full = runsText(f.runs);
+    const details = h('div', { class: 'grid' },
+      h('div', { class: 'field wide', 'data-pl-item': '' }, h('span', { class: 'f-l', text: 'Description' }), h('span', { class: 'f-v post-b' }, runsEl(f.runs))),
+      f.quote ? h('div', { class: 'field wide', 'data-pl-item': '' }, h('span', { class: 'f-l', text: 'Related Case' }), h('span', { class: 'f-v' }, f.quote.author ? h('b', { text: f.quote.author + ': ' }) : null, runsEl(f.quote.runs))) : null,
+      f.image ? h('div', { class: 'field', 'data-pl-item': '' }, h('span', { class: 'f-l', text: 'Attachment' }), h('span', { class: 'f-v file-cell' }, thumbEl(f.image, 'Attachment'), h('span', { text: 'Attachment' }))) : null,
+      f.video ? h('div', { class: 'field', 'data-pl-item': '' }, h('span', { class: 'f-l', text: 'Media' }), h('span', { class: 'f-v', text: 'Video attached' })) : null);
+    return [
+      h('div', { class: 'card' },
+        h('div', { class: 'rec-head' },
+          h('div', { class: 'rec-top' },
+            h('span', { class: 'ico task', 'aria-hidden': 'true', text: 'C' }),
+            h('div', {}, h('div', { class: 'rec-kind', text: `Case ${caseNo(f.href)}` }), h('h1', { class: 'rec-name', text: model.title + (full.length > model.title.length ? '…' : '') })),
+            h('div', { class: 'rec-actions' }, ['Follow', 'Edit', 'Close Case', '▾'].map((t) => h('button', { class: 'btn', type: 'button', text: t })))),
+          h('div', { class: 'highlights' },
+            [['Account Name', f.author || model.site], ['Contact', f.handle || '-'], ['Opened', opened || '-'],
+              ['Engagement', statsShort(f.stats) || '-'], ['Priority', pick(['High', 'Medium', 'Low'])], ['Case Owner', pick(OWNERS)]]
+              .map(([l, v]) => h('div', {}, h('div', { class: 'hl-l', text: l }), h('div', { class: 'hl-v', text: v }))))),
+        h('ol', { class: 'path', 'aria-label': 'Reading progress' }, CASE_STAGES.map((st) => h('li', { text: st, 'data-state': 'todo' })))),
+      h('section', { class: 'card sec', 'data-collapsed': 'false', 'data-pl-section': '0' },
+        h('button', { class: 'sec-h', 'aria-expanded': 'true', text: 'Case Details', onclick: (e) => toggleSection(e.currentTarget.parentElement) }),
+        h('div', { class: 'sec-b' }, details)),
+      h('section', { class: 'card sec', 'data-collapsed': 'false', 'data-pl-section': '1' },
+        h('button', { class: 'sec-h', 'aria-expanded': 'true', text: `Comments (${replies.length})`, onclick: (e) => toggleSection(e.currentTarget.parentElement) }),
+        h('div', { class: 'sec-b' }, replies.length ? h('ol', { class: 'tl' }, replies.map(commentEl)) : h('div', { class: 'hl-l', text: 'No comments loaded yet.' }), moreEl())),
+    ];
+  }
+
   // Index pages: every headline is a row in an "All Opportunities" list view
   function listViewEl(model) {
     const items = model.items.filter((it) => SAFE_HREF_RE.test(it.href));
@@ -268,12 +372,19 @@
     return [{ ...s0, blocks: [{ type: 'field', label: 'Description', wide: true, runs: [{ t: ex }] }, ...s0.blocks] }, ...rest];
   }
 
+  function titleFor(model) {
+    if (model.kind === 'feed') return model.items.some((it) => it.focal) ? FAKE_TITLES.case : FAKE_TITLES.feed;
+    return FAKE_TITLES[model.kind] || FAKE_TITLES.article;
+  }
+
   function build(model) {
     S.rng = mulberry(hashStr((model.title || '') + '|' + (model.site || '')));
     S.clock = new Date();
     S.clock.setDate(S.clock.getDate() - rint(1, 6));
     S.clock.setHours(8, rint(0, 59), 0, 0);
-    const content = model.kind === 'index'
+    const content = model.kind === 'feed'
+      ? (model.items.some((it) => it.focal) ? caseRecordEl(model) : feedListEl(model))
+      : model.kind === 'index'
       ? listViewEl(model)
       : [recordHeader(model),
         model.sections.length
@@ -298,9 +409,34 @@
     const sc = main.scrollHeight > main.clientHeight + 1 ? main : $('.body');
     const max = sc.scrollHeight - sc.clientHeight;
     const frac = max > 0 ? sc.scrollTop / max : 1;
-    const cur = Math.min(STAGES.length - 1, Math.floor(frac * STAGES.length));
-    $$('.path li').forEach((li, i) => li.setAttribute('data-state', i < cur ? 'done' : i === cur ? 'current' : 'todo'));
+    const lis = $$('.path li');
+    const cur = Math.min(lis.length - 1, Math.floor(frac * lis.length));
+    lis.forEach((li, i) => li.setAttribute('data-state', i < cur ? 'done' : i === cur ? 'current' : 'todo'));
     S.host.setAttribute('data-pl-progress', String(Math.round(frac * 100)));
+    // endless feeds: near the bottom, ask the hidden page for more
+    if (S.model && S.model.kind === 'feed' && max - sc.scrollTop < LOAD_MORE_PX) needMore(false);
+  }
+
+  function nearEnd() {
+    const main = $('[data-pl-main]');
+    const sc = main.scrollHeight > main.clientHeight + 1 ? main : $('.body');
+    return sc.scrollHeight - sc.clientHeight - sc.scrollTop < LOAD_MORE_PX;
+  }
+
+  function needMore(force) {
+    if (!S.opts || typeof S.opts.onNeedMore !== 'function') return;
+    const now = Date.now();
+    clearTimeout(S.moreTimer);
+    if (!force && now - S.lastMore < LOAD_MORE_THROTTLE_MS) {
+      // deferred, not dropped: at the very bottom no further scroll events arrive
+      S.moreTimer = setTimeout(() => { if (S.host && nearEnd()) needMore(false); }, LOAD_MORE_THROTTLE_MS - (now - S.lastMore));
+      return;
+    }
+    S.lastMore = now;
+    S.host.setAttribute('data-pl-loading', 'true');
+    const st = $('[data-pl-more-status]');
+    if (st) st.textContent = 'Loading more...';
+    S.opts.onNeedMore();
   }
 
   function filter(q) {
@@ -328,7 +464,7 @@
   function closePreview() { const p = $('[data-pl-preview]'); if (p) p.hidden = true; }
 
   function moveSection(dir) {
-    if (S.model && S.model.kind === 'index') {
+    if (S.model && (S.model.kind === 'index' || (S.model.kind === 'feed' && !S.model.items.some((it) => it.focal)))) {
       const links = $$('tr[data-pl-item]:not([data-pl-hidden="true"]) a.lv-link');
       if (!links.length) return;
       const i = Math.max(0, Math.min(links.length - 1, links.indexOf(S.shadow.activeElement) + dir));
@@ -423,6 +559,8 @@
     a('data-pl-extractor', m.extractor);
     a('data-pl-kind', m.kind || 'article');
     a('data-pl-items', $$('.lv-t tbody tr').length);
+    a('data-pl-comments', $$('.tl-e[data-kind="email"] .post').length);
+    a('data-pl-loading', 'false');
     a('data-pl-entries', $$('.tl-e').length);
     a('data-pl-related', $$('.chip').length);
     a('data-pl-sections', $$('[data-pl-section]').length);
@@ -446,7 +584,7 @@
   function mount(model, opts) {
     if (S.host) return update(model);
     S.model = model; S.opts = opts || {};
-    S.fakeTitle = FAKE_TITLES[model.kind] || FAKE_TITLES.article;
+    S.fakeTitle = titleFor(model);
     const host = document.createElement('div');
     host.id = HOST_ID;
     for (const [k, v] of Object.entries(HOST_LOCK)) host.style.setProperty(k, v, 'important');
@@ -474,7 +612,7 @@
     const top = main ? main.scrollTop : 0;
     const q = ($('[data-pl-search]') || {}).value || '';
     S.model = model;
-    S.fakeTitle = FAKE_TITLES[model.kind] || FAKE_TITLES.article;
+    S.fakeTitle = titleFor(model);
     document.title = S.fakeTitle;
     S.shadow.querySelector('.app').remove();
     S.shadow.append(build(model));
@@ -490,12 +628,24 @@
     window.removeEventListener('keydown', onKey, true);
     window.removeEventListener('keyup', onKey, true);
     window.removeEventListener('keypress', onKey, true);
+    clearTimeout(S.moreTimer);
     S.host.remove();
     restoreDocument();
     S.host = null; S.shadow = null; S.model = null;
   }
 
   const isMounted = () => !!S.host;
+  // the page's own title while we show the fake one (the page may have retitled itself since)
+  const realTitle = () => (S.saved ? S.saved.title : document.title);
+  const isLoading = () => !!S.host && S.host.getAttribute('data-pl-loading') === 'true';
 
-  root.ProLookRender = { mount, update, unmount, isMounted, VERSION, HOST_ID };
+  // no new content arrived after a load-more request
+  function idle() {
+    if (!S.host || S.host.getAttribute('data-pl-loading') !== 'true') return;
+    S.host.setAttribute('data-pl-loading', 'false');
+    const st = $('[data-pl-more-status]');
+    if (st) st.textContent = 'No more items right now.';
+  }
+
+  root.ProLookRender = { mount, update, unmount, isMounted, isLoading, idle, realTitle, VERSION, HOST_ID };
 })(globalThis);

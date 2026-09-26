@@ -122,7 +122,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .rec-kind { font-size: var(--pl-size-sm); color: var(--pl-text-muted); }
 .rec-name { margin: 0; font-size: var(--pl-size-xl); font-weight: var(--pl-weight-bold); line-height: 1.2; }
 .rec-actions { margin-inline-start: auto; display: flex; }
-.btn { height: 30px; padding: 0 14px; border: 1px solid var(--pl-border-strong); background: var(--pl-surface); color: var(--pl-accent); font-size: var(--pl-size-md); }
+.btn { height: 30px; padding: 0 14px; white-space: nowrap; border: 1px solid var(--pl-border-strong); background: var(--pl-surface); color: var(--pl-accent); font-size: var(--pl-size-md); }
 .btn:first-child { border-radius: var(--pl-radius) 0 0 var(--pl-radius); }
 .btn:last-child { border-radius: 0 var(--pl-radius) var(--pl-radius) 0; }
 .btn + .btn { border-inline-start: 0; }
@@ -199,6 +199,18 @@ td.meta { color: var(--pl-text-muted); white-space: nowrap; width: 1%; }
 .lv-link { font-weight: 600; font-size: var(--pl-size-read); }
 .lv-sum { color: var(--pl-text-muted); font-size: var(--pl-size-sm); margin-top: 2px; }
 .pill { display: inline-block; padding: 1px 8px; border-radius: 10px; background: var(--pl-accent-soft); color: var(--pl-accent); font-size: var(--pl-size-xs); white-space: nowrap; }
+
+/* ─── Feed posts ─── */
+.lv-name.top { align-items: flex-start; }
+.post-h { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.muted { color: var(--pl-text-muted); font-size: var(--pl-size-sm); }
+.post { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
+.post-ctx { font-size: var(--pl-size-xs); color: var(--pl-text-muted); }
+.post .pill { align-self: flex-start; }
+.post-b { font-size: var(--pl-size-read); line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere; }
+.post-q { border-inline-start: 3px solid var(--pl-border-strong); padding: 4px 10px; background: var(--pl-surface-alt); color: var(--pl-text-muted); font-size: var(--pl-size-sm); border-radius: 0 var(--pl-radius) var(--pl-radius) 0; }
+.more { display: flex; align-items: center; gap: 12px; padding: var(--pl-pad); }
+.more .btn { border-radius: var(--pl-radius); }
 
 /* ─── Rail ─── */
 .composer { display: flex; gap: 4px; padding: 0 var(--pl-pad) var(--pl-pad); }

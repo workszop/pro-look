@@ -152,3 +152,52 @@ test('tidy: drops duplicated dek, byline line, bare date and one-word chrome', (
   assert.ok(texts.includes('Founded in 1999') && texts.includes('Chapter 2026'), 'year-bearing sentences are not dates');
   assert.equal(model.meta.byline, 'Robert Hart');
 });
+
+// X-like fixtures build their DOM from script after load, like the real SPA
+async function loadLive(name) {
+  const file = new URL(name, FIX);
+  const dom = new JSDOM(readFileSync(file, 'utf8'), { url: file.href, runScripts: 'dangerously', resources: 'usable' });
+  await new Promise((r) => setTimeout(r, 700));
+  const model = extract(dom.window.document, { Readability, DOMParser: dom.window.DOMParser, url: file.href });
+  dom.window.close();
+  return model;
+}
+
+test('x feed: posts become feed items with author, text, links, media, quote, context, stats', async () => {
+  const model = await loadLive('xfeed.html');
+  assert.equal(model.kind, 'feed');
+  assert.equal(model.items.length, 10);
+  const [p0, p1, p2, p3] = model.items;
+  assert.equal(p0.author, 'Dana Lee');
+  assert.equal(p0.handle, '@dana_l');
+  assert.match(p0.href, /fixtures\/xstatus\.html$/);
+  assert.match(runsText(p0.runs), /^Post number 0: shipping/);
+  assert.ok(p0.runs.some((r) => r.href === 'https://example.com/p0' && r.t === 'caching'), 'inline link kept');
+  assert.equal(p0.time, '1h');
+  assert.match(p0.stats, /0 replies/);
+  assert.equal(p0.image, '', 'avatar is not a post image');
+  assert.match(p1.image, /otter\.svg$/, 'tweetPhoto image');
+  assert.equal(p2.quote.author, 'Quoted Person');
+  assert.match(runsText(p2.quote.runs), /original quoted post/);
+  assert.doesNotMatch(runsText(p2.runs), /original quoted post/, 'quote not merged into main text');
+  assert.equal(p3.context, 'Some Friend reposted');
+  assert.ok(!model.items.some((i) => /Otters|trending/i.test(runsText(i.runs))), 'sidebar trends excluded');
+  assert.ok(model.nav.some((n) => n.t === 'Explore'));
+  assert.equal(model.title, 'Home', '"Home / X" splits on the slash');
+});
+
+test('x status page: focal post is marked and titles the record, replies follow', async () => {
+  const model = await loadLive('xstatus.html');
+  assert.equal(model.kind, 'feed');
+  assert.equal(model.items.length, 4);
+  assert.ok(model.items[0].focal);
+  assert.ok(model.items.slice(1).every((i) => !i.focal));
+  assert.match(model.title, /^Post number 0: shipping a small feature today\./);
+  assert.match(runsText(model.items[0].runs), /Second paragraph/);
+  assert.match(model.items[0].runs.map((r) => r.t).join(''), /today\.\n\nSecond paragraph/, 'post line breaks kept');
+});
+
+test('news cards with <article> and headline links stay in index mode', () => {
+  const { model } = load('home.html');
+  assert.equal(model.kind, 'index');
+});

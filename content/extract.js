@@ -28,7 +28,13 @@
   const INDEX_LD_RE = /"@type"\s*:\s*\[?\s*"(CollectionPage|ItemList)"/;
   const SUMMARY_SEL = 'p, [class*="summary" i], [class*="description" i], [class*="excerpt" i], [class*="dek" i], [class*="standfirst" i], [class*="teaser" i]';
   const SKIP_LINK_RE = /^skip to\b/i;
-  const TITLE_SPLIT_RE = /\s+[|·•–\-:]\s+/;
+  // Social feeds (X, Bluesky, Mastodon, Threads...): posts are articles whose permalink wraps a <time>
+  const POST_SEL = 'article, [role="article"]';
+  const PERMALINK_HINT_RE = /\/(status|statuses|post|posts|notes)\/[\w-]+/i;
+  const AVATAR_RE = /profile_images|avatar|emoji/i;
+  const FEED_MIN_POSTS = 3;
+  const CARD_HEADLINE_CHARS = 40;
+  const TITLE_SPLIT_RE = /\s+[|·•–\-:/]\s+/;
 
   // ─── Helpers ───
   const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
@@ -52,7 +58,7 @@
   }
 
   // Inline runs keep links clickable: [{t:'text'}, {t:'label', href:'…'}]
-  function runsOf(el, base) {
+  function runsOf(el, base, keepBreaks) {
     const runs = [];
     const push = (t, href) => {
       if (!t) return;
@@ -62,10 +68,10 @@
     };
     (function walk(node, href) {
       for (const n of node.childNodes) {
-        if (n.nodeType === 3) push(n.nodeValue.replace(/\s+/g, ' '), href);
+        if (n.nodeType === 3) push(keepBreaks ? n.nodeValue.replace(/[^\S\n]+/g, ' ') : n.nodeValue.replace(/\s+/g, ' '), href);
         else if (n.nodeType === 1) {
           if (SKIP_TAGS.has(n.tagName) || n.tagName === 'IMG') continue;
-          if (n.tagName === 'BR') { push(' ', href); continue; }
+          if (n.tagName === 'BR') { push(keepBreaks ? '\n' : ' ', href); continue; }
           const h = n.tagName === 'A' ? absUrl(n.getAttribute('href'), base) : href;
           walk(n, h || href);
         }
@@ -73,6 +79,7 @@
     })(el, '');
     // trim edges and drop empties
     if (runs.length) { runs[0].t = runs[0].t.replace(/^\s+/, ''); runs[runs.length - 1].t = runs[runs.length - 1].t.replace(/\s+$/, ''); }
+    if (keepBreaks) runs.forEach((r) => { r.t = r.t.replace(/\n{3,}/g, '\n\n'); });
     return runs.filter((r) => r.t.trim() || r.t === ' ');
   }
 
@@ -255,8 +262,8 @@
     }
   }
 
-  function cleanTitle(doc) {
-    const raw = norm(doc.title);
+  function cleanTitle(doc, override) {
+    const raw = norm(override || doc.title);
     const h1 = doc.querySelector('h1');
     const h1t = h1 ? norm(h1.textContent) : '';
     if (raw) {
@@ -324,8 +331,85 @@
       }
     }
     for (const r of model.related || []) out.push(r.t);
-    for (const it of model.items || []) out.push(it.title, it.summary || '');
+    for (const it of model.items || []) out.push(it.title || '', it.summary || '', it.runs ? runsText(it.runs) : '');
     return norm(out.join(' '));
+  }
+
+  // ─── Feeds (social timelines, threads) ───
+  const pathOf = (u) => { try { return new URL(u).pathname.replace(/\/+$/, ''); } catch (e) { return ''; } };
+
+  function postText(el, perma) {
+    // X marks the text explicitly; otherwise take the longest inline-only block that is not a link
+    const marked = el.querySelectorAll('[data-testid="tweetText"]');
+    if (marked.length) return { main: marked[0], quote: marked[1] || null };
+    let best = null;
+    let bestLen = 0;
+    for (const b of el.querySelectorAll('p, div, span')) {
+      if (b.contains(perma) || b.closest('a, [role="group"], button') || !isInlineOnly(b)) continue;
+      const len = norm(b.textContent).length;
+      if (len > bestLen) { best = b; bestLen = len; }
+    }
+    return { main: best, quote: null };
+  }
+
+  function postAuthor(el, base) {
+    const box = el.querySelector('[data-testid="User-Name"]') || el;
+    let name = '';
+    let href = '';
+    for (const a of box.querySelectorAll('a[href]')) {
+      const path = pathOf(absUrl(a.getAttribute('href'), base));
+      const t = norm(a.textContent);
+      if (/^\/@?[^/]+$/.test(path) && t && !t.startsWith('@') && t.length <= 60) { name = t; href = absUrl(a.getAttribute('href'), base); break; }
+    }
+    let handle = '';
+    for (const sp of box.querySelectorAll('span')) { const t = norm(sp.textContent); if (/^@[\w.]+$/.test(t)) { handle = t; break; } }
+    return { name, handle, href };
+  }
+
+  function feedPosts(doc, base) {
+    const live = hasLayout(doc);
+    const self = pathOf(base);
+    const byHref = new Map();
+    for (const el of doc.querySelectorAll(POST_SEL)) {
+      if (el.parentElement && el.parentElement.closest(POST_SEL)) continue;
+      if (live && !el.getClientRects().length) continue;
+      let perma = null;
+      for (const t of el.querySelectorAll('time')) { const a = t.closest('a[href]'); if (a && el.contains(a)) { perma = a; break; } }
+      if (!perma) perma = [...el.querySelectorAll('a[href]')].find((a) => PERMALINK_HINT_RE.test(a.getAttribute('href')));
+      if (!perma) continue;
+      const href = absUrl(perma.getAttribute('href'), base).split(/[?#]/)[0];
+      const { main, quote } = postText(el, perma);
+      const runs = main ? runsOf(main, base, true) : [];
+      // news-style cards carry a long headline link: those belong to index mode, not feeds
+      const headline = [...el.querySelectorAll('a[href]')].some((a) => a !== perma && (!main || !main.contains(a)) && norm(a.textContent).length >= CARD_HEADLINE_CHARS);
+      if (headline && !el.querySelector('[data-testid="tweetText"]')) continue;
+      const author = postAuthor(el, base);
+      const timeEl = perma.querySelector('time') || el.querySelector('time');
+      let image = '';
+      for (const img of el.querySelectorAll('img')) {
+        if (quote && quote.parentElement && quote.parentElement.contains(img) && !img.closest('[data-testid="tweetPhoto"]')) continue;
+        if (img.closest('[data-testid="Tweet-User-Avatar"]') || AVATAR_RE.test(img.getAttribute('src') || '') || AVATAR_RE.test(img.className || '')) continue;
+        const b = imageBlock(img, base);
+        if (b) { image = b.src; break; }
+      }
+      const group = el.querySelector('[role="group"][aria-label]');
+      const ctxEl = el.querySelector('[data-testid="socialContext"]');
+      const quoteBox = quote && quote.closest('[role="link"]');
+      const item = {
+        href, runs,
+        author: author.name, handle: author.handle, authorHref: author.href,
+        time: timeEl ? norm(timeEl.textContent) : '',
+        datetime: timeEl ? timeEl.getAttribute('datetime') || '' : '',
+        image, video: !!el.querySelector('video, [data-testid="videoPlayer"]'),
+        stats: group ? norm(group.getAttribute('aria-label')) : '',
+        context: ctxEl ? norm(ctxEl.textContent) : '',
+        quote: quote ? { runs: runsOf(quote, base, true), author: quoteBox ? postAuthor(quoteBox, base).name || norm((quoteBox.querySelector('[data-testid="User-Name"] span') || {}).textContent) : '' } : null,
+        focal: pathOf(href) === self,
+      };
+      if (!byHref.has(href)) byHref.set(href, item);
+      if (byHref.size >= MAX_ITEMS) break;
+    }
+    return [...byHref.values()];
   }
 
   // ─── Index pages (home, section fronts, blogs, link aggregators) ───
@@ -458,7 +542,21 @@
     const url = opts.url || (doc.location && doc.location.href) || '';
     let site = '';
     try { site = new URL(url).hostname.replace(/^www\./, ''); } catch (e) { site = ''; }
-    const title = cleanTitle(doc);
+    const title = cleanTitle(doc, opts.title);
+
+    // feeds first: cheap, and Readability would collapse a timeline into one post
+    const posts = opts.kind && opts.kind !== 'feed' ? [] : feedPosts(doc, url);
+    if (posts.length >= FEED_MIN_POSTS || posts.some((p) => p.focal) || opts.kind === 'feed') {
+      const model = buildModel(doc.createElement('div'), doc, { url, site, title, extractor: 'feed' });
+      model.kind = 'feed';
+      model.items = posts;
+      const focal = posts.find((p) => p.focal);
+      if (focal) model.title = runsText(focal.runs).slice(0, 90) || title;
+      model.meta = pageMeta(doc, null);
+      model.sourceChars = null;
+      model.modelChars = modelText(model).length;
+      return model;
+    }
 
     let article = null;
     if (Readability && doc.body) {

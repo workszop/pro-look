@@ -174,6 +174,8 @@ try {
   await waitOn(page);
   const late = await page.waitForFunction(() => document.getElementById('pro-look-root').shadowRoot.textContent.includes('Late loaded post'), null, { timeout: 12000 }).then(() => true, () => false);
   check('SPA: late content re-extracted', late);
+  const spaName = await page.evaluate(() => document.getElementById('pro-look-root').shadowRoot.querySelector('.rec-name').textContent);
+  check('re-extract keeps the real page title, not the fake one', spaName === 'Feed', spaName);
   await page.screenshot({ animations: 'disabled', path: join(SHOTS_DIR, 'app.png') });
   await toggle();
   await waitOff(page);
@@ -218,14 +220,53 @@ try {
   await toggle();
   await waitOff(page);
 
-  // 7c. Alt+Shift+X works from the page even when Chrome has not bound the command
+  // 7c. Ctrl+Shift+X works from the page even when Chrome has not bound the command
   await page.goto(base + 'page2.html');
-  await page.keyboard.press('Alt+Shift+X');
+  await page.keyboard.press('Control+Shift+X');
   const hkOn = await waitOn(page).then(() => true, () => false);
-  check('Alt+Shift+X toggles on (in-page fallback)', hkOn);
-  await page.keyboard.press('Alt+Shift+X');
+  check('Ctrl+Shift+X toggles on (in-page fallback)', hkOn);
+  await page.keyboard.press('Control+Shift+X');
   const hkOff = await waitOff(page).then(() => true, () => false);
-  check('Alt+Shift+X toggles off', hkOff);
+  check('Ctrl+Shift+X toggles off', hkOff);
+
+  // 7d. X-like virtualized feed: posts accumulate past the 10-post DOM window; a post opens as a case
+  await page.goto(base + 'xfeed.html');
+  await toggle();
+  await waitOn(page);
+  const items = () => page.evaluate(() => Number(document.getElementById('pro-look-root').getAttribute('data-pl-items')));
+  await page.waitForFunction(() => document.getElementById('pro-look-root').getAttribute('data-pl-items') === '10', null, { timeout: STEP_MS }).catch(() => {});
+  c = await contract(page);
+  check('x feed: late SPA posts render as a case list', c.kind === 'feed' && c.items === '10', JSON.stringify(c));
+  check('x feed: tab title is Cases', (await page.title()) === 'Cases | Workspace');
+  const listName = await page.evaluate(() => document.getElementById('pro-look-root').shadowRoot.querySelector('.rec-name').textContent);
+  check('x feed: list named after the real page title', listName === 'Home ▾', listName);
+  for (let i = 0; i < 8 && (await items()) < 25; i++) {
+    await page.evaluate(() => { const m = document.getElementById('pro-look-root').shadowRoot.querySelector('.main'); m.scrollTop = m.scrollHeight; m.dispatchEvent(new Event('scroll')); });
+    await page.waitForTimeout(1200);
+  }
+  const acc = await page.evaluate(() => ({
+    rows: document.getElementById('pro-look-root').shadowRoot.querySelectorAll('.lv-t tbody tr').length,
+    domPosts: document.querySelectorAll('article').length,
+    firstStillListed: document.getElementById('pro-look-root').shadowRoot.querySelector('.lv-t tbody tr .post-b').textContent.startsWith('Post number 0'),
+    firstInDom: !!document.querySelector('article a[href="xstatus.html"]'),
+  }));
+  check('x feed: load-more accumulates beyond the DOM window', acc.rows >= 25 && acc.domPosts === 10 && acc.firstStillListed && !acc.firstInDom, JSON.stringify(acc));
+  await page.evaluate(() => { document.getElementById('pro-look-root').shadowRoot.querySelector('.main').scrollTop = 0; });
+  await page.screenshot({ animations: 'disabled', path: join(SHOTS_DIR, 'xfeed.png') });
+  await page.locator('#pro-look-root a.lv-link', { hasText: 'Dana Lee' }).first().click();
+  await page.waitForURL(/xstatus\.html$/, { timeout: STEP_MS });
+  await waitOn(page);
+  await page.waitForFunction(() => document.getElementById('pro-look-root').getAttribute('data-pl-comments') === '3', null, { timeout: STEP_MS }).catch(() => {});
+  c = await contract(page);
+  const rec = await page.evaluate(() => {
+    const r = document.getElementById('pro-look-root').shadowRoot;
+    return { name: r.querySelector('.rec-name')?.textContent, desc: r.querySelector('.field.wide .f-v')?.textContent, first: r.querySelector('.tl-e .tl-m')?.textContent };
+  });
+  check('x status: focal post is a Case with 3 comments', c.kind === 'feed' && c.comments === '3' && (await page.title()) === 'Case | Workspace', JSON.stringify(c));
+  check('x status: description has the full post, comments show real authors', /Second paragraph/.test(rec.desc) && /Comment · \S+/.test(rec.first) && /^Post number 0/.test(rec.name), JSON.stringify(rec));
+  await page.screenshot({ animations: 'disabled', path: join(SHOTS_DIR, 'xstatus.png') });
+  await toggle();
+  await waitOff(page);
 
   // 8. Mobile width: single column
   await page.setViewportSize({ width: 390, height: 800 });
