@@ -7,7 +7,7 @@ DIST="$ROOT/dist"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 
-FILES=(manifest.json background.js options.html options.js content icons)
+FILES=(manifest.json background.js options.html options.js content icons LICENSE)
 
 mkdir -p "$STAGE/pro-look" "$DIST"
 for f in "${FILES[@]}"; do cp -R "$ROOT/$f" "$STAGE/pro-look/"; done

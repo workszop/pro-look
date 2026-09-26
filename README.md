@@ -190,3 +190,9 @@ EXT_DIR=/path/to/unzipped/pro-look npm run e2e   # test exactly what users insta
 ```
 
 The e2e run needs Chrome for Testing (branded Chrome 137+ ignores `--load-extension`); set `CHROME_BIN` and `PW_MODULE` if yours live elsewhere.
+
+---
+
+## License
+
+[MIT](LICENSE) © 2026 Andrzej Jankowski. `content/Readability.js` is Mozilla Readability, licensed under the Apache License 2.0 (notice kept in the file).
