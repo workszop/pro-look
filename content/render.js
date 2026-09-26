@@ -4,7 +4,7 @@
   'use strict';
 
   // ─── Constants ───
-  const VERSION = '0.1.0';
+  const VERSION = '0.1.1';
   const HOST_ID = 'pro-look-root';
   const FAKE_TITLES = { article: 'Opportunity | Workspace', index: 'Opportunities | Workspace', feed: 'Cases | Workspace', case: 'Case | Workspace' };
   const CASE_STAGES = ['New', 'Working', 'Escalated', 'Resolved', 'Closed'];
@@ -268,7 +268,7 @@
           ? h('img', { class: 'thumb', src: it.image, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', 'data-alt': it.title })
           : h('span', { class: 'ico opp', 'aria-hidden': 'true', text: 'O' }),
         h('div', {}, h('a', { class: 'lv-link', href: it.href, text: it.title }), it.summary ? h('div', { class: 'lv-sum', text: it.summary }) : null))),
-      h('td', { class: 'meta', text: it.group || hostOf(it.href) }),
+      h('td', { class: 'meta', text: it.kicker || it.group || hostOf(it.href) }),
       h('td', {}, h('span', { class: 'pill', text: pick(STAGES) })),
       h('td', { class: 'meta', text: it.time || dayOffset(rint(3, 60)) }),
       h('td', { class: 'meta', text: pick(OWNERS) })));

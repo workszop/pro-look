@@ -4,9 +4,11 @@
 
 Pro Look is a Chrome extension. Press one shortcut and the website you are reading is redrawn as a sober, blue-grey sales app: headlines become "opportunities", article paragraphs become "emails" and "call notes" in an activity timeline, tweets become support "cases", and pictures shrink to tiny thumbnails that look like file icons. You can still read everything; from across the room it just looks like work.
 
-| Before | After (Ctrl+Shift+X) |
+| Before: theguardian.com | After: Ctrl+Shift+X |
 | --- | --- |
-| ![A news homepage before](docs/before-home.png) | ![The same page as a CRM list of opportunities](docs/after-home.png) |
+| ![The Guardian homepage as it normally looks](docs/before-home.png) | ![The same Guardian homepage redrawn as a CRM list of opportunities](docs/after-home.png) |
+
+<sub>Screenshots of theguardian.com are shown only to illustrate what the extension does. Pro Look is not affiliated with the Guardian.</sub>
 
 ---
 

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Pro Look",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Shows any website as a business CRM record page. Toggle with Ctrl+Shift+X.",
   "permissions": ["storage", "scripting", "contextMenus"],
   "host_permissions": ["<all_urls>"],

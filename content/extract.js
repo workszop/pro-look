@@ -28,6 +28,7 @@
   const INDEX_LD_RE = /"@type"\s*:\s*\[?\s*"(CollectionPage|ItemList)"/;
   const SUMMARY_SEL = 'p, [class*="summary" i], [class*="description" i], [class*="excerpt" i], [class*="dek" i], [class*="standfirst" i], [class*="teaser" i]';
   const SKIP_LINK_RE = /^skip to\b/i;
+  const KICKER_MAX_CHARS = 30;
   // Social feeds (X, Bluesky, Mastodon, Threads...): posts are articles whose permalink wraps a <time>
   const POST_SEL = 'article, [role="article"]';
   const PERMALINK_HINT_RE = /\/(status|statuses|post|posts|notes)\/[\w-]+/i;
@@ -421,7 +422,9 @@
       const href = absUrl(a.getAttribute('href'), base).split('#')[0];
       if (!/^(https?|file):/.test(href) || href === self) continue;
       if (a.closest('nav, footer, [role="navigation"], [role="contentinfo"]')) continue;
-      const t = norm(a.textContent);
+      let t = norm(a.textContent);
+      // card-wide overlay links carry no text, only an aria-label (theguardian.com and many others)
+      if (t.length < HEADLINE_MIN_CHARS) { const al = norm(a.getAttribute('aria-label')); if (al.length >= HEADLINE_MIN_CHARS) t = al; }
       const inHeading = !!a.closest('h1, h2, h3, h4');
       if ((t.length < HEADLINE_MIN_CHARS && !(inHeading && t.length >= 8)) || t.length > 300) continue;
       if (live && !a.getClientRects().length) continue;
@@ -453,14 +456,29 @@
     return 'article';
   }
 
+  // "Russia" + "Russia strikes at..." rendered inline: split a short leading label off the headline
+  function splitKicker(el) {
+    for (const node of [el, ...el.querySelectorAll('h1, h2, h3, h4, div, span')]) {
+      const kids = [...node.children];
+      if (kids.length < 2) continue;
+      const kicker = norm(kids[0].textContent);
+      const rest = norm(kids.slice(1).map((k) => k.textContent).join(' '));
+      if (kicker && kicker.length <= KICKER_MAX_CHARS && rest.length >= 15 && norm(node.textContent).startsWith(kicker)) return { kicker, title: rest };
+    }
+    return { kicker: '', title: norm(el.textContent) };
+  }
+
   function indexItems(doc, base, links) {
     const cands = new Set(links.map((l) => l.a));
-    const headings = [...doc.querySelectorAll('h2, h3')].filter((h) => {
+    const hasH2 = !!doc.querySelector('h2');
+    const headings = [...doc.querySelectorAll(hasH2 ? 'h2' : 'h2, h3')].filter((h) => {
       const t = norm(h.textContent);
       return t.length >= 2 && t.length <= 60 && ![...h.querySelectorAll('a')].some((a) => cands.has(a));
     });
     const byHref = new Map();
-    for (const { a, href, title } of links) {
+    for (const link of links) {
+      const { a, href } = link;
+      let { title } = link;
       // widest ancestor that still holds only this headline = the story card
       let box = a;
       while (box.parentElement && box.parentElement !== doc.body) {
@@ -472,28 +490,39 @@
         if (other) break;
         box = p;
       }
+      // an overlay link that shares its card with sub-links cannot widen; look around it instead,
+      // ignoring anything that belongs to another headline link
+      const scope = box === a && a.parentElement ? a.parentElement : box;
+      const own = (el) => { const l = el.closest('a[href]'); return !l || l === a || !cands.has(l); };
+      const find = (sel) => [...scope.querySelectorAll(sel)].filter(own);
+      // headline element: inside the link, or (overlay links) the card's heading
+      const headEl = a.querySelector('h1, h2, h3, h4') || (!norm(a.textContent) ? find('h2, h3, h4').find((x) => !headings.includes(x)) : null) || a;
+      const parts = splitKicker(headEl);
+      let kicker = '';
+      if (parts.kicker && parts.title) { kicker = parts.kicker; title = parts.title; }
       let summary = '';
-      for (const el of box.querySelectorAll(SUMMARY_SEL)) {
+      for (const el of find(SUMMARY_SEL)) {
         const t = norm(el.textContent);
         if (t.length >= 30 && t.length <= 400 && !t.includes(title) && !title.includes(t)) { summary = t; break; }
       }
       // table-layout listings (Hacker News style) keep the byline in the next row
       const nx = box.tagName === 'TR' && box.nextElementSibling;
       if (!summary && nx && ![...nx.querySelectorAll('a[href]')].some((x) => cands.has(x))) summary = norm(nx.textContent).slice(0, 200);
-      const timeEl = box.querySelector('time');
+      const timeEl = find('time')[0];
       const time = timeEl ? norm(timeEl.textContent) || norm(timeEl.getAttribute('datetime')) : '';
       let image = '';
-      for (const img of box.querySelectorAll('img')) { const b = imageBlock(img, base); if (b) { image = b.src; break; } }
+      for (const img of find('img')) { const b = imageBlock(img, base); if (b) { image = b.src; break; } }
       let group = '';
       for (const h of headings) {
-        if (box.contains(h)) continue;
+        if (a.contains(h) || h.contains(a) || headEl.contains(h)) continue;
         if (h.compareDocumentPosition(a) & 4) group = norm(h.textContent); else break;
       }
       const prev = byHref.get(href);
       if (prev) {
         if (title.length > prev.title.length) prev.title = title;
         prev.summary = prev.summary || summary; prev.image = prev.image || image; prev.time = prev.time || time;
-      } else byHref.set(href, { title, href, summary, time, image, group });
+        prev.kicker = prev.kicker || kicker;
+      } else byHref.set(href, { title, href, summary, time, image, group, kicker });
       if (byHref.size >= MAX_ITEMS) break;
     }
     return [...byHref.values()];
@@ -590,7 +619,7 @@
     return model;
   }
 
-  const api = { extract, modelText, runsText, VERSION: '0.1.0' };
+  const api = { extract, modelText, runsText, VERSION: '0.1.1' };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.ProLookExtract = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

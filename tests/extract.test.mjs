@@ -201,3 +201,20 @@ test('news cards with <article> and headline links stay in index mode', () => {
   const { model } = load('home.html');
   assert.equal(model.kind, 'index');
 });
+
+test('guardian-style cards: overlay aria-label links, kicker labels, pictures outside the link', () => {
+  const { model } = load('guardian-home.html', 'https://www.example-news.test/international');
+  assert.equal(model.kind, 'index');
+  const byTitle = Object.fromEntries(model.items.map((i) => [i.title, i]));
+  const flood = byTitle['Floods force thousands from homes along the river delta'];
+  assert.ok(flood, 'overlay-link card found: ' + model.items.map((i) => i.title).join(' | '));
+  assert.equal(flood.kicker, 'Floods');
+  assert.match(flood.image, /otter\.svg$/, 'picture next to the overlay link');
+  assert.equal(flood.group, 'News');
+  const sub = byTitle['Maps show how far the flood water has spread'];
+  assert.ok(sub, 'sublink title without its kicker glued on');
+  assert.equal(sub.kicker, 'Explainer');
+  assert.ok(!model.items.some((i) => /^FloodsFloods|^ExplainerMaps/.test(i.title)));
+  assert.equal(byTitle['City verdict: what happens next for the club'].group, 'Sport');
+  assert.ok(!model.items.some((i) => /Terms and conditions/.test(i.title)));
+});

@@ -93,7 +93,7 @@ try {
   await toggle();
   await waitOn(page);
   let c = await contract(page);
-  check('article: contract published', c && c.state === 'on' && c.version === '0.1.0', JSON.stringify(c));
+  check('article: contract published', c && c.state === 'on' && c.version === '0.1.1', JSON.stringify(c));
   check('article: readability extractor', c.extractor === 'readability');
   check('article: ≥3 sections', Number(c.sections) >= 3, c.sections);
   check('article: coverage ≥ 0.90', Number(c.coverage) >= 0.9, c.coverage);
