@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pro Look – Options</title>
+<style>
+  /* ─── Tokens ─── */
+  :root {
+    --bg: #eaeff6; --surface: #ffffff; --border: #d4dbe6; --text: #17304f; --muted: #56688a;
+    --accent: #1b5fb4; --accent-ink: #ffffff; --ok: #2e844a;
+    --font: "Segoe UI", system-ui, -apple-system, Arial, sans-serif; --size: 14px; --size-sm: 12px; --radius: 4px; --gap: 16px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font: var(--size)/1.5 var(--font); padding: var(--gap); }
+  main { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: var(--gap); }
+  h1 { font-size: 20px; margin: 0 0 var(--gap); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--gap); display: flex; flex-direction: column; gap: 8px; }
+  h2 { font-size: var(--size); margin: 0; }
+  p, small { color: var(--muted); margin: 0; font-size: var(--size-sm); }
+  textarea, select, input[type=range] { width: 100%; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 8px; }
+  textarea { min-height: 180px; resize: vertical; }
+  button { align-self: flex-start; font: inherit; background: var(--accent); color: var(--accent-ink); border: 0; border-radius: var(--radius); padding: 8px 16px; cursor: pointer; }
+  kbd { border: 1px solid var(--border); border-radius: 3px; padding: 0 5px; background: var(--bg); }
+  [role=status] { color: var(--ok); min-height: 1.5em; font-size: var(--size-sm); }
+  @media (max-width: 768px) { main { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<h1>Pro Look</h1>
+<main>
+  <section class="card">
+    <h2>Always-on sites</h2>
+    <p>One hostname per line (without www). These open disguised automatically.</p>
+    <textarea id="alwaysOn" spellcheck="false" aria-label="Always-on sites"></textarea>
+  </section>
+  <section class="card">
+    <h2>Look</h2>
+    <label for="density">Density</label>
+    <select id="density"><option value="comfy">Comfortable</option><option value="compact">Compact</option></select>
+    <label for="thumb">Image thumbnail size: <output id="thumbOut"></output> px</label>
+    <input id="thumb" type="range" min="20" max="64" step="2">
+    <small>Smaller thumbnails read as icons from a distance.</small>
+  </section>
+  <section class="card">
+    <h2>Keys</h2>
+    <p><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> toggles the current tab (change it at chrome://extensions/shortcuts).</p>
+    <p>In the disguise: <kbd>/</kbd> search, <kbd>j</kbd>/<kbd>k</kbd> next/previous section, <kbd>Esc</kbd> close preview or clear search.</p>
+    <p>Right-click the toolbar icon for "Always disguise this site".</p>
+  </section>
+</main>
+<p><button id="save" type="button">Save</button></p>
+<div role="status" aria-live="polite" id="status"></div>
+<script src="options.js"></script>
+</body>
+</html>

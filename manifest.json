@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Pro Look",
+  "version": "0.1.0",
+  "description": "Shows any website as a business CRM record page. Toggle with Alt+Shift+X.",
+  "permissions": ["storage", "scripting", "contextMenus"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "action": {
+    "default_title": "Toggle Pro Look (Alt+Shift+X)",
+    "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+  },
+  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "commands": {
+    "toggle-disguise": {
+      "suggested_key": { "default": "Alt+Shift+X" },
+      "description": "Toggle the CRM disguise on the current tab"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*", "file:///*"],
+      "js": ["content/Readability.js", "content/extract.js", "content/render.js", "content/main.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "options_page": "options.html"
+}
